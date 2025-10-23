@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional, Dict
 from enum import Enum
 from pydantic import BaseModel, Field, HttpUrl
@@ -104,3 +105,11 @@ class WebhookPayload(BaseModel):
     urls: List[str]
     error: Optional[str] = None
     data: Optional[Dict] = None  # Included only if webhook_data_in_payload=True
+
+
+class TopKeywords(BaseModel):
+    title: str
+    author: str
+    date: date
+    url: str
+    top_6_keywords: list    

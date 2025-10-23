@@ -282,3 +282,6 @@ docs/apps/linkdin/debug*/
 docs/apps/linkdin/samples/insights/*
 
 scripts/
+
+# secret-file
+deploy/docker/config.yml

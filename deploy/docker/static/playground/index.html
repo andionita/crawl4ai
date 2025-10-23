@@ -186,6 +186,7 @@
                     <option value="crawl_stream">/crawl/stream</option>
                     <option value="md">/md</option>
                     <option value="llm">/llm</option>
+                    <option value="llm_schema">/llm_schema</option>
                 </select>
             </div>
             <div class="p-4">
@@ -496,7 +497,7 @@
                 mdOptions.classList.remove('hidden');
                 // Auto-open the /md options
                 mdOptions.setAttribute('open', '');
-            } else if (endpoint === 'llm') {
+            } else if (endpoint === 'llm' || endpoint === 'llm_schema') {
                 llmOptions.classList.remove('hidden');
                 // Auto-open the /llm options
                 llmOptions.setAttribute('open', '');
@@ -638,7 +639,8 @@
                 crawl: '/crawl',
                 crawl_stream: '/crawl/stream', // Keep for backward compatibility
                 md: '/md',
-                llm: '/llm'
+                llm: '/llm',
+                llm_schema: '/llm_schema'
             };
 
             const api = endpointMap[endpoint];
@@ -658,7 +660,7 @@
                     q: query || null, // Use the query if provided, otherwise null
                     c: cache
                 };
-            } else if (endpoint === 'llm') {
+            } else if (endpoint === 'llm' || endpoint === 'llm_schema') {
                 // LLM endpoint has a different URL pattern and uses query params
                 // This will be handled directly in the fetch below
                 payload = null;
@@ -677,7 +679,7 @@
                 let response, responseData;
                 const useStreamOverride = (endpoint === 'crawl') && shouldUseStream(payload);
 
-                if (endpoint === 'llm') {
+                if (endpoint === 'llm' || endpoint === 'llm_schema') {
                     // Special handling for LLM endpoint which uses URL pattern: /llm/{encoded_url}?q={query}
                     const url = urls[0];
                     const encodedUrl = encodeURIComponent(url);
@@ -768,7 +770,7 @@
                 forceHighlightElement(document.querySelector('#response-content code'));
                 
                 // For generateSnippets, handle the LLM case specially
-                if (endpoint === 'llm') {
+                if (endpoint === 'llm' || endpoint === 'llm_schema') {
                     const url = urls[0];
                     const encodedUrl = encodeURIComponent(url);
                     const question = document.getElementById('llm-question').value.trim() || "What is this page about?";

@@ -1,3 +1,4 @@
+import re
 import dns.resolver
 import logging
 import yaml
@@ -179,3 +180,56 @@ def verify_email_domain(email: str) -> bool:
         return True if records else False
     except Exception as e:
         return False
+
+def sanitize_html(html):
+    """
+    Sanitize an HTML string by escaping quotes.
+
+    How it works:
+    1. Replaces all unwanted and special characters with an empty string.
+    2. Escapes double and single quotes for safe usage.
+
+    Args:
+        html (str): The HTML string to sanitize.
+
+    Returns:
+        str: The sanitized HTML string.
+    """
+
+    # Replace all unwanted and special characters with an empty string
+    sanitized_html = html
+    # sanitized_html = re.sub(r'[^\w\s.,;:!?=\[\]{}()<>\/\\\-"]', '', html)
+
+    # Escape all double and single quotes
+    sanitized_html = sanitized_html.replace('"', '\\"').replace("'", "\\'")
+
+    return sanitized_html
+
+def escape_json_string(s):
+    """
+    Escapes characters in a string to be JSON safe.
+
+    Parameters:
+    s (str): The input string to be escaped.
+
+    Returns:
+    str: The escaped string, safe for JSON encoding.
+    """
+    # Replace problematic backslash first
+    s = s.replace("\\", "\\\\")
+
+    # Replace the double quote
+    s = s.replace('"', '\\"')
+
+    # Escape control characters
+    s = s.replace("\b", "\\b")
+    s = s.replace("\f", "\\f")
+    s = s.replace("\n", "\\n")
+    s = s.replace("\r", "\\r")
+    s = s.replace("\t", "\\t")
+
+    # Additional problematic characters
+    # Unicode control characters
+    s = re.sub(r"[\x00-\x1f\x7f-\x9f]", lambda x: "\\u{:04x}".format(ord(x.group())), s)
+
+    return s

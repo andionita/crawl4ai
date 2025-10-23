@@ -34,6 +34,8 @@ from crawl4ai.content_filter_strategy import (
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
 
+from crawl4ai.prompts import PROMPT_EXTRACT_BLOCKS, PROMPT_EXTRACT_BLOCKS_WITH_INSTRUCTION, PROMPT_EXTRACT_SCHEMA_WITH_INSTRUCTION, JSON_SCHEMA_BUILDER_XPATH, PROMPT_EXTRACT_INFERRED_SCHEMA
+
 from utils import (
     TaskStatus,
     FilterType,
@@ -44,9 +46,15 @@ from utils import (
     get_llm_api_key,
     validate_llm_provider,
     get_llm_temperature,
-    get_llm_base_url
+    get_llm_base_url,
+    sanitize_html,
+    escape_json_string
 )
+
+
 from webhook import WebhookDeliveryService
+
+from schemas import TopKeywords
 
 import psutil, time
 
@@ -105,6 +113,72 @@ async def handle_llm_qa(
         )
 
         return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"QA processing error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+async def handle_llm_schema_qa(
+    url: str,
+    query: str,
+    config: dict
+) -> str:
+    """Process QA using LLM with crawled content and schema as context."""
+    try:
+        if not url.startswith(('http://', 'https://')) and not url.startswith(("raw:", "raw://")):
+            url = 'https://' + url
+        # Extract base URL by finding last '?q=' occurrence
+        last_q_index = url.rfind('?q=')
+        if last_q_index != -1:
+            url = url[:last_q_index]
+
+        # Get markdown content
+        async with AsyncWebCrawler() as crawler:
+            result = await crawler.arun(url)
+            if not result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=result.error_message
+                )
+            #content = result.markdown.fit_markdown or result.markdown.raw_markdown
+            content = result.cleaned_html
+
+        # Create prompt and get LLM response
+#        prompt = f"""Use the following content as context to answer the question.
+#    Content:
+#    {content}
+#
+#    Question: {query}
+#
+#    Answer:"""
+#
+#        # api_token=os.environ.get(config["llm"].get("api_key_env", ""))
+    
+        variable_values = {
+            "URL": url,
+            "HTML": escape_json_string(sanitize_html(content)),
+        }
+
+        prompt_with_variables = PROMPT_EXTRACT_SCHEMA_WITH_INSTRUCTION
+        variable_values["REQUEST"] = query
+        variable_values["SCHEMA"] = json.dumps(TopKeywords.model_json_schema(), indent=2) # if type of self.schema is dict else self.schema
+            
+        for variable in variable_values:
+            prompt_with_variables = prompt_with_variables.replace(
+                "{" + variable + "}", variable_values[variable]
+            )
+
+        response = perform_completion_with_backoff(
+            provider=config["llm"]["provider"],
+            prompt_with_variables=prompt_with_variables,
+            api_token=get_llm_api_key(config),  # Returns None to let litellm handle it
+            temperature=get_llm_temperature(config),
+            base_url=get_llm_base_url(config)
+        )        
+
+        return json.loads(response.choices[0].message.content)
     except Exception as e:
         logger.error(f"QA processing error: {str(e)}", exc_info=True)
         raise HTTPException(

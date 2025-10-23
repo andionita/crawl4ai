@@ -18,7 +18,7 @@ import base64
 import re
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from api import (
-    handle_markdown_request, handle_llm_qa,
+    handle_markdown_request, handle_llm_qa, handle_llm_schema_qa,
     handle_stream_crawl_request, handle_crawl_request,
     stream_results
 )
@@ -452,6 +452,20 @@ async def llm_endpoint(
     if not url.startswith(("http://", "https://")) and not url.startswith(("raw:", "raw://")):
         url = "https://" + url
     answer = await handle_llm_qa(url, q, config)
+    return JSONResponse({"answer": answer})
+
+@app.get("/llm_schema/{url:path}")
+async def llm_schema_endpoint(
+    request: Request,
+    url: str = Path(...),
+    q: str = Query(...),
+    _td: Dict = Depends(token_dep),
+):
+    if not q:
+        raise HTTPException(400, "Query parameter 'q' is required")
+    if not url.startswith(("http://", "https://")) and not url.startswith(("raw:", "raw://")):
+        url = "https://" + url
+    answer = await handle_llm_schema_qa(url, q, config)
     return JSONResponse({"answer": answer})
 
 
