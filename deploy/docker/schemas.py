@@ -109,7 +109,8 @@ class WebhookPayload(BaseModel):
 
 class TopKeywords(BaseModel):
     title: str
-    author: str
+    authors: list
+    contacts: list
     date: date
     url: str
     top_6_keywords: list    

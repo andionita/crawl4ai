@@ -497,9 +497,13 @@
                 mdOptions.classList.remove('hidden');
                 // Auto-open the /md options
                 mdOptions.setAttribute('open', '');
-            } else if (endpoint === 'llm' || endpoint === 'llm_schema') {
+            } else if (endpoint === 'llm') {
                 llmOptions.classList.remove('hidden');
                 // Auto-open the /llm options
+                llmOptions.setAttribute('open', '');
+            } else if (endpoint === 'llm_schema') {
+                llmOptions.classList.remove('hidden');
+                // Auto-open the /llm_schema options
                 llmOptions.setAttribute('open', '');
             } else {
                 // For /crawl endpoints, show the advanced config

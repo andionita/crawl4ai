@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import asyncio
 from typing import List, Tuple, Dict
@@ -36,6 +37,11 @@ from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
 
 from crawl4ai.prompts import PROMPT_EXTRACT_BLOCKS, PROMPT_EXTRACT_BLOCKS_WITH_INSTRUCTION, PROMPT_EXTRACT_SCHEMA_WITH_INSTRUCTION, JSON_SCHEMA_BUILDER_XPATH, PROMPT_EXTRACT_INFERRED_SCHEMA
 
+from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
+
+from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
+from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
+
 from utils import (
     TaskStatus,
     FilterType,
@@ -50,7 +56,6 @@ from utils import (
     sanitize_html,
     escape_json_string
 )
-
 
 from webhook import WebhookDeliveryService
 
@@ -134,51 +139,80 @@ async def handle_llm_schema_qa(
         if last_q_index != -1:
             url = url[:last_q_index]
 
+        url_filter = URLPatternFilter(patterns=[url + "/*"])
+        crawler_config = CrawlerRunConfig(
+            deep_crawl_strategy=BFSDeepCrawlStrategy(
+                max_depth=2,
+                #max_pages=10,
+                include_external=False,
+                filter_chain=FilterChain([url_filter])
+            ),
+            cache_mode=CacheMode.BYPASS,
+            scraping_strategy=LXMLWebScrapingStrategy(),
+            verbose=True,
+        )
+
         # Get markdown content
         async with AsyncWebCrawler() as crawler:
-            result = await crawler.arun(url)
-            if not result.success:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=result.error_message
-                )
-            #content = result.markdown.fit_markdown or result.markdown.raw_markdown
-            content = result.cleaned_html
+            results = await crawler.arun(url, config=crawler_config)
+            results_json = []
+            for result in results:
+                if not result.success:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=result.error_message
+                    )
+                print(result.metadata)
+                if result.metadata.get('depth', 0) == 0 or result.metadata.get('parent_url', 0) == result.url:
+                    continue
+                if url not in result.url:
+                    continue
+                #content = result.markdown.fit_markdown or result.markdown.raw_markdown
+                content = result.cleaned_html
 
-        # Create prompt and get LLM response
-#        prompt = f"""Use the following content as context to answer the question.
-#    Content:
-#    {content}
-#
-#    Question: {query}
-#
-#    Answer:"""
-#
-#        # api_token=os.environ.get(config["llm"].get("api_key_env", ""))
-    
-        variable_values = {
-            "URL": url,
-            "HTML": escape_json_string(sanitize_html(content)),
-        }
+                # Create prompt and get LLM response
+                #prompt = f"""Use the following content as context to answer the question.
+                #Content:
+                #{content}
 
-        prompt_with_variables = PROMPT_EXTRACT_SCHEMA_WITH_INSTRUCTION
-        variable_values["REQUEST"] = query
-        variable_values["SCHEMA"] = json.dumps(TopKeywords.model_json_schema(), indent=2) # if type of self.schema is dict else self.schema
+                #Question: {query}
+                #
+                #Answer:"""
+                #
+                # api_token=os.environ.get(config["llm"].get("api_key_env", ""))
             
-        for variable in variable_values:
-            prompt_with_variables = prompt_with_variables.replace(
-                "{" + variable + "}", variable_values[variable]
-            )
+                variable_values = {
+                    "URL": url,
+                    "HTML": escape_json_string(sanitize_html(content)),
+                }
 
-        response = perform_completion_with_backoff(
-            provider=config["llm"]["provider"],
-            prompt_with_variables=prompt_with_variables,
-            api_token=get_llm_api_key(config),  # Returns None to let litellm handle it
-            temperature=get_llm_temperature(config),
-            base_url=get_llm_base_url(config)
-        )        
+                prompt_with_variables = PROMPT_EXTRACT_SCHEMA_WITH_INSTRUCTION
+                variable_values["REQUEST"] = query
+                variable_values["SCHEMA"] = json.dumps(TopKeywords.model_json_schema(), indent=2) # if type of self.schema is dict else self.schema
+                    
+                for variable in variable_values:
+                    prompt_with_variables = prompt_with_variables.replace(
+                        "{" + variable + "}", variable_values[variable]
+                    )
 
-        return json.loads(response.choices[0].message.content)
+                response = perform_completion_with_backoff(
+                    provider=config["llm"]["provider"],
+                    prompt_with_variables=prompt_with_variables,
+                    api_token=get_llm_api_key(config),  # Returns None to let litellm handle it
+                    temperature=get_llm_temperature(config),
+                    base_url=get_llm_base_url(config)
+                )        
+        
+                response_str = response.choices[0].message.content
+                match = re.search('<blocks>(.+?)</blocks>', response_str, flags=re.DOTALL)
+                if match:
+                    response_json = match.group(1)
+                    logger.info(response_json)
+                    results_json.append(json.loads(response_json))
+                else:
+                    results_json.append(response_str)
+                    
+        return results_json
     except Exception as e:
         logger.error(f"QA processing error: {str(e)}", exc_info=True)
         raise HTTPException(
