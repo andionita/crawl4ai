@@ -139,11 +139,13 @@ async def handle_llm_schema_qa(
         if last_q_index != -1:
             url = url[:last_q_index]
 
+        if url.endswith("/"):
+            url = url[:-1]
         url_filter = URLPatternFilter(patterns=[url + "/*"])
         crawler_config = CrawlerRunConfig(
             deep_crawl_strategy=BFSDeepCrawlStrategy(
                 max_depth=2,
-                #max_pages=10,
+                #max_pages=20,
                 include_external=False,
                 filter_chain=FilterChain([url_filter])
             ),
@@ -163,24 +165,15 @@ async def handle_llm_schema_qa(
                         detail=result.error_message
                     )
                 print(result.metadata)
-                if result.metadata.get('depth', 0) == 0 or result.metadata.get('parent_url', 0) == result.url:
+                if result.metadata.get('depth', 0) == 0:
                     continue
-                if url not in result.url:
+                if result.metadata.get('parent_url', 0) == result.url:
                     continue
-                #content = result.markdown.fit_markdown or result.markdown.raw_markdown
+                if url + "/" not in result.url:                    
+                    continue
+                
                 content = result.cleaned_html
 
-                # Create prompt and get LLM response
-                #prompt = f"""Use the following content as context to answer the question.
-                #Content:
-                #{content}
-
-                #Question: {query}
-                #
-                #Answer:"""
-                #
-                # api_token=os.environ.get(config["llm"].get("api_key_env", ""))
-            
                 variable_values = {
                     "URL": url,
                     "HTML": escape_json_string(sanitize_html(content)),

@@ -112,5 +112,5 @@ class TopKeywords(BaseModel):
     authors: list
     contacts: list
     date: date
-    url: str
+    page_url: str
     top_6_keywords: list    
